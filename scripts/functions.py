@@ -160,7 +160,3 @@ def metrics(model, x_test, y_test, title, type) :
 
 
 
-
-
-
-
