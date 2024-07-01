@@ -34,7 +34,7 @@ from sklearn.metrics import (
 import shap
 
 # Optimisation
-from hyperopt import fmin, tpe, hp, Trials, STATUS_OK
+# from hyperopt import fmin, tpe, hp, Trials, STATUS_OK
 
 # Graphics
 import matplotlib.pyplot as plt
