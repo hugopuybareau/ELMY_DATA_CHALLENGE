@@ -295,4 +295,4 @@ def hyperopt(model, space : dict, x_train : pd.DataFrame, y_train : pd.DataFrame
         trials=trials
     )
 
-    print('Meilleurs paramètres trouvés :')
+    print('Meilleurs paramètres trouvés :', best)
