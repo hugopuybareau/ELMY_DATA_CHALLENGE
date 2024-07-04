@@ -66,16 +66,40 @@ def spot_columns(df : pd.DataFrame):  # Function that will return a print with t
         print(f"Column '{column}' : {nb_nan} NaN values")
     print('\n\n')
 
-def spot_deviants_z1(df : pd.DataFrame): # Function that spots the deviants values with the Z1-method
+def replace_outliers_z1(df: pd.DataFrame, range : int):
 
     df_numeric = df.apply(pd.to_numeric, errors='coerce')
-    df_numeric.dropna(axis=1, how='all'
-                      )
-    z_scores = np.abs(stats.zscore(df))  
-    outliers = np.where(z_scores > 3)
+    
+    # Calculer les Z-scores pour chaque valeur du DataFrame
+    z_scores = np.abs(stats.zscore(df_numeric))
+    outliers = np.where(z_scores > range) # Indices des valeurs abérrantes
+    
+    df_cleaned = df.copy()
+    
+    # Remplacer les valeurs aberrantes par la moyenne de la colonne correspondante
+    for row, col in zip(outliers[0], outliers[1]):
+        mean_value = df_numeric.iloc[:, col].median()
+        df_cleaned.iat[row, col] = mean_value
+    
+    return df_cleaned
 
-    print("Indices des valeurs aberrantes (Z-score):")
-    print(outliers)
+def replace_outliers_iqr(df: pd.DataFrame, column: str) -> pd.DataFrame:
+    # Calculer le premier quartile (Q1) et le troisième quartile (Q3)
+    Q1 = df[column].quantile(0.25)
+    Q3 = df[column].quantile(0.75)
+    IQR = Q3 - Q1
+
+    # Définir les bornes pour les valeurs aberrantes
+    lower_bound = Q1 - 1.5 * IQR
+    upper_bound = Q3 + 1.5 * IQR
+
+    # Calculer la moyenne de la colonne
+    mean_value = df[column].mean()
+
+    # Remplacer les valeurs aberrantes par la moyenne
+    df[column] = np.where((df[column] < lower_bound) | (df[column] > upper_bound), mean_value, df[column])
+    
+    return df
 
 
 def nan_identer(df : pd.DataFrame):  # Replaces qualitatives by 'no_data' str and quantitatives by the column's mean
@@ -135,8 +159,8 @@ def univariate_analysis(df):
     categorical_cols = df.select_dtypes(include=[object, 'category']).columns
     
     # Statistiques descriptives pour les variables numériques
-    print("\nStatistiques descriptives pour les variables numériques :")
-    print(df[numeric_cols].describe())
+    # print("\nStatistiques descriptives pour les variables numériques :")
+    # print(df[numeric_cols].describe())
     
     # Visualisation des distributions des variables numériques sans palette
     for col in numeric_cols:
