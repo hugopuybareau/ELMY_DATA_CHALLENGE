@@ -211,9 +211,9 @@ def bivariate_analysis(df):
 ### Modélisation ###
 
 
-def cross_validation(model, x_train : pd.DataFrame, y_train : pd.DataFrame, n_fold : int, scoring_method : str):  # Cross-validation
+def cross_validation(model, x_train: pd.DataFrame, y_train: pd.DataFrame, n_fold: int, scoring_method: str):
 
-    kf = KFold(n_splits=n_fold, shuffle=True)
+    kf = KFold(n_splits=n_fold, shuffle=True, random_state=42)
     score = cross_val_score(model, x_train, y_train, cv=kf, scoring=scoring_method)
 
     print(
@@ -230,17 +230,21 @@ def cross_validation(model, x_train : pd.DataFrame, y_train : pd.DataFrame, n_fo
         "Standard deviation ",
         score.std(),
         "\n\n",
-        "##################################",
+        "###################################",
     )
 
 
 def metrics(model, x_test : pd.DataFrame, y_test : pd.DataFrame, title : str, type : Literal['classifier', 'regressor']):
 
-    y_pred = model.predict(x_test)
-    y_pred_proba = model.predict_proba(x_test)[:, 1]  # ?
+    y_pred = model.predict(x_test)  
+    auc = 0
+    gini = 0
 
     if type == "classifier":
+        y_pred_proba = model.predict_proba(x_test)[:, 1]
         cm = confusion_matrix(y_test, y_pred)
+        auc = roc_auc_score(y_test, y_pred_proba, multi_class="ovr")
+        gini = 2 * auc - 1
         plt.figure(figsize=(8, 6))
         sns.set(font_scale=1.2)
         sns.heatmap(cm, annot=True, cmap="coolwarm", cbar=True)
@@ -252,8 +256,6 @@ def metrics(model, x_test : pd.DataFrame, y_test : pd.DataFrame, title : str, ty
     precision = precision_score(y_test, y_pred, average="weighted")
     recall = recall_score(y_test, y_pred, average="weighted")
     f1 = f1_score(y_test, y_pred, average="weighted")
-    auc = roc_auc_score(y_test, y_pred_proba, multi_class="ovr")
-    gini = 2 * auc - 1
 
     print(
         "##### SCORES #####",
