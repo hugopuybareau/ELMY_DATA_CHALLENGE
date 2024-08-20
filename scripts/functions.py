@@ -7,7 +7,7 @@ from typing import Literal
 ### Machine Learning ###
 
 # Pre-processing
-from sklearn.preprocessing import LabelEncoder
+from sklearn.preprocessing import LabelEncoder, StandardScaler
 
 # Modelisation
 from sklearn.model_selection import (
@@ -53,6 +53,7 @@ def replacing(df : pd.DataFrame):  # Function that will group 'Null's and 'NaN's
 
 def nan_colormap(df : pd.DataFrame, title : str):  # Function using seaborn's colormap to locate NaNs, use after 'replacing'
 
+    plt.figure(figsize=(16,9))
     sns.heatmap(df.isna(), cbar=False)
     plt.title(title, fontdict={"fontsize": 18}, pad=12)
 
@@ -64,30 +65,60 @@ def spot_columns(df : pd.DataFrame):  # Function that will return a print with t
 
     for column, nb_nan in nan_by_columns.items():
         print(f"Column '{column}' : {nb_nan} NaN values")
-    print('\n\n')
 
-def spot_deviants_z1(df : pd.DataFrame): # Function that spots the deviants values with the Z1-method
+def replace_outliers_z1(df: pd.DataFrame, range : int):
 
     df_numeric = df.apply(pd.to_numeric, errors='coerce')
-    df_numeric.dropna(axis=1, how='all'
-                      )
-    z_scores = np.abs(stats.zscore(df))  
-    outliers = np.where(z_scores > 3)
+    
+    # Calculer les Z-scores pour chaque valeur du DataFrame
+    z_scores = np.abs(stats.zscore(df_numeric))
+    outliers = np.where(z_scores > range) # Indices des valeurs abérrantes
+    
+    df_cleaned = df.copy()
+    
+    # Remplacer les valeurs aberrantes par la moyenne de la colonne correspondante
+    for row, col in zip(outliers[0], outliers[1]):
+        mean_value = df_numeric.iloc[:, col].median()
+        df_cleaned.iat[row, col] = mean_value
+    
+    return df_cleaned
 
-    print("Indices des valeurs aberrantes (Z-score):")
-    print(outliers)
+def replace_outliers_iqr(df: pd.DataFrame, column: str) -> pd.DataFrame:
+    # Calculer le premier quartile (Q1) et le troisième quartile (Q3)
+    Q1 = df[column].quantile(0.25)
+    Q3 = df[column].quantile(0.75)
+    IQR = Q3 - Q1
+
+    # Définir les bornes pour les valeurs aberrantes
+    lower_bound = Q1 - 1.5 * IQR
+    upper_bound = Q3 + 1.5 * IQR
+
+    # Calculer la moyenne de la colonne
+    mean_value = df[column].mean()
+
+    # Remplacer les valeurs aberrantes par la moyenne
+    df[column] = np.where((df[column] < lower_bound) | (df[column] > upper_bound), mean_value, df[column])
+    
+    return df
 
 
-def nan_identer(df : pd.DataFrame):  # Replaces qualitatives by 'no_data' str and quantitatives by the column's mean
+def nan_imputer(df : pd.DataFrame, cols : list, method : Literal['mean', 'no_data', 'ffill', 'bfill']):  # Replaces qualitatives by 'no_data' str and quantitatives by the column's mean
 
     df_copy = df.copy()  # Must work on a copy or I get errors after
-
-    for col in df_copy.columns:
-        if df_copy[col].dtype in ["float64", "int64"]:
-            df_copy[col] = df_copy[col].fillna(df_copy[col].mean())
+    
+    for col in cols:
+        if method == 'mean':
+            if df_copy[col].dtype in ["float64", "int64"]:
+                df_copy[col] = df_copy[col].fillna(df_copy[col].mean())
+            else:
+                df_copy[col] = df_copy[col].fillna("no_data")
+        elif method == 'ffill':
+            df_copy[col] = df_copy[col].fillna(method='ffill')
+        elif method == 'bfill':
+            df_copy[col] = df_copy[col].fillna(method='bfill')
         else:
-            df_copy[col] = df_copy[col].fillna("no_data")
-
+            raise ValueError(f"Method '{method}' is not recognized. Use 'mean', 'no_data', 'ffill', or 'bfill'.")
+    
     return df_copy
 
 
@@ -128,18 +159,10 @@ def correlation_matrix(df: pd.DataFrame, method: Literal['pearson', 'kendall', '
     # Afficher la figure
     plt.show()
 
-def univariate_analysis(df):
-    
-    # Séparer les variables numériques et catégorielles
-    numeric_cols = df.select_dtypes(include=[np.number]).columns
-    categorical_cols = df.select_dtypes(include=[object, 'category']).columns
-    
-    # Statistiques descriptives pour les variables numériques
-    print("\nStatistiques descriptives pour les variables numériques :")
-    print(df[numeric_cols].describe())
+def univariate_analysis(df : pd.DataFrame, num_cols : list, cat_cols : list):
     
     # Visualisation des distributions des variables numériques sans palette
-    for col in numeric_cols:
+    for col in num_cols:
         plt.figure(figsize=(12, 6))
         
         # Histogramme sans palette
@@ -156,13 +179,13 @@ def univariate_analysis(df):
         plt.show()
     
     # Visualisation des fréquences des variables catégorielles
-    for col in categorical_cols:
+    for col in cat_cols:
         plt.figure(figsize=(12, 6))
         sns.countplot(y=df[col], order=df[col].value_counts().index)
         plt.title(f'Diagramme en barres de {col}')
         plt.show()
 
-def bivariate_analysis(df):
+def bivariate_analysis(df : pd.DataFrame):
     # Séparer les variables numériques et catégorielles
     numeric_cols = df.select_dtypes(include=[np.number]).columns
     categorical_cols = df.select_dtypes(include=[object, 'category']).columns
@@ -206,6 +229,58 @@ def bivariate_analysis(df):
             plt.title(f'{col1} vs {col2}')
             plt.show()
 
+def plot_time_series(df : pd.DataFrame, time_column : str, columns_to_plot : list) :
+    
+    # Définir la taille de la figure
+    plt.figure(figsize=(14, 8))
+    
+    # Tracer chaque colonne
+    for column in columns_to_plot:
+        sns.lineplot(x=df[time_column], y=df[column], label=column)
+    
+    # Définir les labels et le titre
+    plt.xlabel('Temps')
+    plt.ylabel('Valeurs')
+    plt.title('Évalutation temporelle des données')
+    plt.legend()
+    plt.grid(True)
+    
+    # Afficher le graphique
+    plt.show()
+
+def plot_time_series_with_nans(df : pd.DataFrame, time_column : str, columns_to_plot : list, meth=Literal['mean', 'ffill', 'bfill']):
+    
+    plt.figure(figsize=(14, 8))
+    
+    for column in columns_to_plot:
+
+        original_series = df[column].copy()
+        # Imputation des NaNs selon la méthode choisie
+        if meth == 'mean':
+            if df[column].dtype in ["float64", "int64"]:
+                df[column] = df[column].fillna(df[column].mean())
+            else:
+                df[column] = df[column].fillna("no_data")
+        else :
+            df[column] = df[column].fillna(method=meth)
+        
+        # Tracer les données imputées
+        sns.lineplot(x=df[time_column], y=df[column], label=column)
+        
+        # Mettre en évidence les NaNs dans les données originales
+        nan_indices = original_series[original_series.isna()].index
+        if not nan_indices.empty:
+            plt.scatter(df.loc[nan_indices, time_column], [df[column].mean()] * len(nan_indices), color='red')
+    
+    # Définir les labels et le titre
+    plt.xlabel('Temps')
+    plt.ylabel('Valeurs')
+    plt.title('Évolution temporelle des données')
+    plt.legend()
+    plt.grid(True)
+    
+    # Afficher le graphique
+    plt.show()
 
 
 ### Modélisation ###
@@ -277,24 +352,3 @@ def metrics(model, x_test : pd.DataFrame, y_test : pd.DataFrame, title : str, ty
         "\n\n",
         "##################",
     )
-
-def hyperopt(model, space : dict, x_train : pd.DataFrame, y_train : pd.DataFrame, x_test : pd.DataFrame, y_test : pd.DataFrame) : 
-
-    def objective(params) :
-        model_trained = model(**params, objective = 'binary:logistic')
-        model_trained.fit(x_train, y_train)
-        y_pred = model.predict(x_test)
-        accuracy = accuracy_score(y_test, y_pred)
-        return {'loss' : -accuracy, 'status' : STATUS_OK}
-    
-    trials = Trials()
-
-    best = fmin(
-        fn=objective,
-        space=space,
-        algo=tpe.suggest,
-        max_evals=20,
-        trials=trials
-    )
-
-    print('Meilleurs paramètres trouvés :', best)
